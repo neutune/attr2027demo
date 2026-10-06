@@ -3,41 +3,1288 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Tracing Inputs, Verifying Outputs</title>
+<meta name="referrer" content="no-referrer">
+<title>Tracing Inputs, Verifying Outputs: Validating Attribution in Music Generation</title>
 <style>
-  body { max-width: 860px; margin: 40px auto; padding: 0 16px; font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; line-height: 1.5; color: #1a2430; }
-  h1 { font-size: 1.6rem; margin-bottom: .2rem; }
-  .sub { color: #5a6b7a; margin-top: 0; }
-  section { margin-top: 2rem; }
-  audio { width: 100%; }
-  .card { border: 1px solid #c9d2da; border-radius: 8px; padding: 12px 16px; margin: 12px 0; }
-  .todo { color: #b45309; }
+:root{--bg:#F7F9FA;--card:#FFFFFF;--ink:#1A2430;--muted:#5A6B7A;--hair:#E1E7EC;
+  --acc:#D55E00;--acc2:#0072B2;--good:#0B7A4B;--bad:#c0392b;--soft:#FFF4EC;--vio:#6A4CB0;--teal:#0E7C86;--navh:50px;
+  /* stem palette = the hues of paper Figure 1 (template/fig1_src.svg): stem 1 orange, 2 green, 3 violet,
+     context blue. --sN is the figure pill stroke (row accent, waveform progress), --sNt the figure pill
+     text (labels, play glyph). s3..s5 continue the same recipe at the farthest remaining hues. */
+  --s0:#E8833A;--s1:#3A9E83;--s2:#8A63C9;--s3:#B3CA40;--s4:#CA406C;--s5:#40CA69;--ctxc:#3F7FC4;
+  --s0t:#B3541E;--s1t:#175C4A;--s2t:#4A2F78;--s3t:#798B22;--s4t:#8B2243;--s5t:#228B41;--ctxt:#1F5FA8}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#10161D;--card:#171F28;
+  --ink:#E8ECF0;--muted:#94A3B0;--hair:#26303B;--acc:#FF8B42;--acc2:#57A8E8;--good:#3FBF87;--bad:#e05545;--soft:#2A1F16;--vio:#A98CE8;--teal:#4CC3CD;
+  --s0:#FF8B42;--s1:#4CC3A0;--s2:#A98CE8;--s3:#CEE65B;--s4:#E65B87;--s5:#5BE685;--ctxc:#57A8E8;
+  --s0t:#FFB27A;--s1t:#7FD8B8;--s2t:#C4B0F0;--s3t:#DEEE8D;--s4t:#EE8DAC;--s5t:#8DEEAA;--ctxt:#8CC0F0}}
+:root[data-theme="dark"]{--bg:#10161D;--card:#171F28;--ink:#E8ECF0;--muted:#94A3B0;--hair:#26303B;
+  --acc:#FF8B42;--acc2:#57A8E8;--good:#3FBF87;--bad:#e05545;--soft:#2A1F16;--vio:#A98CE8;--teal:#4CC3CD;
+  --s0:#FF8B42;--s1:#4CC3A0;--s2:#A98CE8;--s3:#CEE65B;--s4:#E65B87;--s5:#5BE685;--ctxc:#57A8E8;
+  --s0t:#FFB27A;--s1t:#7FD8B8;--s2t:#C4B0F0;--s3t:#DEEE8D;--s4t:#EE8DAC;--s5t:#8DEEAA;--ctxt:#8CC0F0}
+*{box-sizing:border-box;margin:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  padding:calc(var(--navh) + 20px) 16px 80px;max-width:980px;margin:0 auto}
+h1{font-size:22px;line-height:1.3;margin-bottom:6px}
+h2{font-size:18px;margin:0 0 6px}
+p{margin:5px 0}
+a{color:var(--acc2)}
+.muted{color:var(--muted);font-size:13px}
+kbd{font:10.5px/1.3 ui-monospace,Menlo,monospace;border:1px solid var(--hair);border-bottom-width:2px;
+  border-radius:4px;padding:0 4px;color:var(--muted);margin-right:3px;vertical-align:1px}
+#nav{position:fixed;top:0;left:0;right:0;height:var(--navh);z-index:50;background:var(--card);border-bottom:1px solid var(--hair);
+  display:flex;align-items:center;gap:4px;padding:0 12px;overflow-x:auto;white-space:nowrap;scrollbar-width:none}
+#nav::-webkit-scrollbar{display:none}
+#nav .brand{font-weight:700;font-size:13.5px;color:var(--ink);text-decoration:none;margin-right:8px}
+#nav a.lnk{font-size:13px;color:var(--muted);text-decoration:none;padding:5px 9px;border-radius:8px}
+#nav a.lnk:hover{color:var(--ink);background:var(--soft)}
+#nav a.lnk.on{color:var(--acc);font-weight:650}
+#nav .sp{flex:1 1 auto}
+#theme{font-size:12px;padding:3px 10px;border:1px solid var(--hair);border-radius:12px;background:transparent;color:var(--muted);cursor:pointer}
+header{margin-bottom:6px}
+header .authors{font-size:14px;color:var(--ink);margin:2px 0}
+section{scroll-margin-top:calc(var(--navh) + 12px);margin:26px 0 0;padding-top:14px;border-top:1px solid var(--hair)}
+section:first-of-type{border-top:0;padding-top:0}
+.shead{display:flex;gap:9px;align-items:baseline;flex-wrap:wrap;margin-bottom:6px}
+.shead h2{margin:0}
+.shead h2 .snum{color:var(--muted);font-weight:650;margin-right:1px}
+/* right-aligned, muted cross-reference to the paper: "paper 4.3 . Figure 2, Table 3" */
+.shead .pref{margin-left:auto;font-size:13.5px;font-weight:650;color:var(--ink);white-space:nowrap}
+.shead .pref .sep{padding:0 2px;opacity:.65}
+.fchip{flex:0 0 auto;font-size:12px;font-weight:700;line-height:20px;letter-spacing:.04em;text-transform:uppercase;
+  color:#fff;background:var(--acc);border-radius:8px;padding:0 9px;white-space:nowrap}
+.intro{max-width:860px}
+.intro p{margin:4px 0}
+/* paper floats: collapsible block, one per float of the paper */
+details.pfloat{background:var(--card);border:1px solid var(--hair);border-radius:12px;margin:10px 0}
+details.pfloat>summary{display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;list-style:none;
+  border-bottom:1px solid transparent;border-radius:12px}
+details.pfloat>summary::-webkit-details-marker{display:none}
+details.pfloat[open]>summary{border-bottom-color:var(--hair);border-radius:12px 12px 0 0}
+details.pfloat>summary:focus-visible{outline:2px solid var(--acc2);outline-offset:-2px}
+.pfloat .cv{flex:0 0 auto;width:0;height:0;border:5px solid transparent;border-left:7px solid var(--muted);border-right:0}
+details.pfloat[open] .cv{transform:rotate(90deg)}
+.fchip.sm{font-size:11px;line-height:18px;padding:0 7px}
+.pfloat .ft{font-size:13.5px;font-weight:650;color:var(--ink);min-width:0}
+.pfloat .pt{margin-left:auto;font-size:11px;color:var(--muted);white-space:nowrap}
+.pbody{padding:9px 12px 11px;overflow-x:auto}
+.pbody>svg{display:block;width:100%;height:auto;max-height:520px;margin:0 auto;font-family:inherit}
+.pcap{font-size:12.5px;color:var(--muted);margin-top:6px;line-height:1.4}
+/* fallback look for a paper table; template/ptab.css (injected below) may override it */
+.pbody table:not(.ptab){border-collapse:collapse;font-size:12.5px;margin:0 auto;color:var(--ink)}
+.pbody table:not(.ptab) th,.pbody table:not(.ptab) td{padding:3px 8px;text-align:right;white-space:nowrap}
+.pbody table:not(.ptab) th{font-weight:650;color:var(--muted)}
+.pbody table:not(.ptab) td:first-child,.pbody table:not(.ptab) th:first-child{text-align:left}
+/* example switcher: one card body per panel, chips carry the paper identifiers */
+/* level bars above the chips: the four retrievers, then the verdict cases that retriever produced
+   (memorization audit), or the a / b / c blocks of paper Table 2. The chips are the innermost level. */
+.blks{flex:0 0 100%;display:flex;flex-wrap:wrap;gap:6px;margin-bottom:9px}
+.blk{display:inline-flex;align-items:baseline;gap:7px;font-family:inherit;font-size:12.5px;line-height:26px;
+  padding:0 11px;border:1px solid var(--hair);border-radius:9px;background:var(--card);color:var(--muted);cursor:pointer}
+.blk .bk{font:700 13px/26px ui-monospace,Menlo,monospace;text-transform:lowercase;color:var(--ink)}
+.blk .bn{font-weight:700;color:var(--ink);white-space:nowrap}
+.blk:hover{border-color:var(--acc)}
+.blk.on{border-color:var(--acc);background:var(--soft)}
+.blk.on .bk,.blk.on .bn,.blk.on .bt{color:var(--acc)}
+.blks.sub{margin-bottom:8px}
+.blks.sub .blk{font-size:12px;line-height:24px;padding:0 9px}
+.blks.sub .blk .bn{font-weight:650}
+.blk[hidden]{display:none}
+.chip[hidden]{display:none}
+/* small uppercase caption naming a level ("Retriever", "Human verdict") */
+.lvh{flex:0 0 100%;font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+  color:var(--muted);margin:2px 0 1px}
+/* a card kind with its own block below the hierarchy (the regeneration gate) */
+.kblk{margin-top:18px;padding-top:12px;border-top:1px dashed var(--hair)}
+.kblk .kbt{font-size:14.5px;font-weight:700;color:var(--ink)}
+.kblk .kbt .hlt1{color:var(--acc)}
+.kblk .kbs{font-size:12.5px;color:var(--muted);margin-top:2px;line-height:1.4;max-width:860px}
+.kblk .sws{margin-top:9px}
+/* what the conditioning swap did to the measurements the paper reports (MFCC timbre, chroma harmony) */
+.mvs{margin:7px 0 2px;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+table.mtab{border-collapse:collapse;width:100%;font-size:12.5px;color:var(--ink)}
+table.mtab th{font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);
+  text-align:left;padding:5px 10px;background:var(--bg);border-bottom:1px solid var(--hair);white-space:nowrap}
+table.mtab th.n,table.mtab td.n{text-align:right;font-family:ui-monospace,Menlo,monospace;white-space:nowrap}
+table.mtab td{padding:5px 10px;border-bottom:1px dotted var(--hair);vertical-align:baseline}
+table.mtab tr:last-child td{border-bottom:0}
+table.mtab .mm{display:inline-block;font:700 9.5px/14px ui-monospace,Menlo,monospace;letter-spacing:.04em;
+  border:1px solid var(--hair);border-radius:6px;padding:0 4px;margin-right:6px;color:var(--muted);vertical-align:1px}
+table.mtab .sysn{color:var(--muted);font-size:11.5px}
+table.mtab .ar{color:var(--muted);padding:0 3px}
+table.mtab .dl{font-weight:700}
+table.mtab .good{color:var(--good)}
+table.mtab .meh{color:var(--muted)}
+.mvs .mleg{font-size:11.5px;color:var(--muted);padding:6px 10px 7px;line-height:1.4;border-top:1px solid var(--hair)}
+.sws{display:flex;flex-wrap:wrap;gap:7px 6px;align-items:center;margin:14px 0 0}
+.sws .swg{flex:0 0 100%;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);
+  margin-top:5px;padding-top:6px;border-top:1px solid var(--hair)}
+.sws .swg.first{margin-top:0;padding-top:0;border-top:0}
+.sws .swg.sub{margin-top:4px;padding-top:4px;border-top:0;font-size:10.5px}
+.sws .swg[hidden]{display:none}
+.chip{display:inline-flex;align-items:baseline;gap:6px;font-family:inherit;font-size:12px;line-height:22px;padding:0 9px;
+  border:1px solid var(--hair);border-radius:11px;background:var(--card);color:var(--muted);cursor:pointer;
+  max-width:100%;white-space:nowrap}
+.chip .cid{font:700 11.5px/22px ui-monospace,Menlo,monospace;letter-spacing:.02em;color:var(--ink)}
+.chip .chint{font-size:11.5px;line-height:22px}
+.chip:hover{border-color:var(--acc)}
+.chip.on{background:var(--acc);border-color:var(--acc);color:#fff}
+.chip.on .cid{color:#fff}
+.chip .ccase{flex:0 0 auto;font-size:11px;font-weight:700;line-height:17px;color:var(--ink);background:var(--bg);
+  border:1px solid var(--hair);border-radius:6px;padding:0 6px;white-space:nowrap}
+.chip.on .ccase{color:#fff;background:transparent;border-color:#fff}
+/* retrieval rank of a memorization example within its retriever's flagged set (rank 1 = closest) */
+.chip .crank{flex:0 0 auto;font:600 10.5px/17px ui-monospace,Menlo,monospace;color:var(--muted);
+  border:1px solid var(--hair);border-radius:6px;padding:0 5px;white-space:nowrap}
+.chip.on .crank{color:#fff;border-color:#fff}
+.chip:focus-visible{outline:2px solid var(--acc2);outline-offset:2px}
+.exhost{min-height:64px}
+/* E3 ranked list (user, 2026-09-16): one search-result row per flagged stem, closest retrieval first */
+.rlist{flex:0 0 100%;display:flex;flex-direction:column;margin-top:2px}
+.rrow{display:grid;grid-template-columns:64px 168px minmax(0,1fr) auto 18px;gap:12px;align-items:center;padding:8px 12px;
+  border:1px solid var(--hair);border-radius:10px;margin-top:6px;cursor:pointer;background:var(--card);font-family:inherit;font-size:13px;color:var(--ink);text-align:left;width:100%}
+.rrow:hover{border-color:var(--acc)}
+.rrow.on{border-color:var(--acc);background:var(--soft)}
+.rrow .rk{font:800 19px/1 ui-monospace,Menlo,monospace;color:var(--ink);text-align:right;white-space:nowrap}
+.rrow .rk small{font:600 11px/1 ui-monospace,Menlo,monospace;color:var(--muted)}
+.rrow .rin{font-weight:650;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rrow .rin .cid{font:700 11px/1 ui-monospace,Menlo,monospace;color:var(--muted);margin-right:7px}
+.rrow .rsc{font:600 12px/1 ui-monospace,Menlo,monospace;color:var(--muted);white-space:nowrap}
+.rrow .rsc .sv{font-size:14px;font-weight:800;color:var(--ink)}
+.rrow .rsc .cutv{color:var(--muted)}
+.rrow .rcv{width:0;height:0;border:5px solid transparent;border-top:7px solid var(--muted);margin-top:5px;justify-self:end}
+.rrow.on .rcv{border-top:0;border-bottom:7px solid var(--acc);margin-top:-3px}
+.ctag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.03em;line-height:18px;padding:0 8px;border-radius:9px;border:1px solid currentColor;white-space:nowrap}
+.ctag.t1,.ctag.t2{color:var(--acc)} .ctag.a{color:var(--acc2)} .ctag.d{color:var(--vio)} .ctag.b,.ctag.c{color:var(--muted)}
+.rgap{font-size:11.5px;color:var(--muted);padding:6px 12px 0 88px}
+.rbody{margin:2px 0 8px}
+.cfil .blk .cdot{display:inline-block;width:8px;height:8px;border-radius:50%;background:currentColor;margin-right:2px;align-self:center}
+.cfil .blk.off{opacity:.45}
+@media (max-width:700px){.rrow{grid-template-columns:44px 1fr auto 14px}.rrow .rin{grid-column:1 / -1;order:5}.rgap{padding-left:12px}}
+.card{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:12px 16px;margin:8px 0 0}
+.card.bare{background:transparent;border:0;border-radius:0;padding:0;margin:8px 0 0}
+.card:focus-within{border-color:var(--acc)}
+.head{display:flex;gap:9px;align-items:baseline;flex-wrap:wrap;margin-bottom:2px}
+.head .i{font-weight:700;font-size:17px}
+.head .i .hl-p{color:var(--acc)} .head .i .hl-c{color:var(--acc2)}
+.head .s{color:var(--muted);font-size:12.5px}
+.head .fid{flex:0 0 auto;font:700 11.5px/19px ui-monospace,Menlo,monospace;letter-spacing:.02em;color:var(--acc);
+  background:var(--soft);border:1px solid var(--acc);border-radius:7px;padding:0 7px}
+/* verdict case of a memorization example (Figure 2 / Table 3): shown on the card head and on every chip */
+.head .ccase{flex:0 0 auto;font-size:12px;font-weight:700;line-height:19px;color:var(--ink);
+  border:1px solid var(--ink);border-radius:7px;padding:0 8px;white-space:nowrap}
+.badges{display:flex;flex-wrap:wrap;gap:6px;margin:5px 0 2px}
+.badge{display:inline-flex;align-items:center;gap:6px;font-size:12px;line-height:20px;padding:0 9px;border-radius:11px;
+  background:var(--soft);border:1px solid var(--hair);color:var(--ink)}
+.badge .bv{font-weight:700;font-family:ui-monospace,Menlo,monospace;color:var(--acc)}
+.badge.strong{border:2px solid var(--acc);background:var(--soft);font-size:13px;line-height:22px}
+.badge.strong .bl{font-weight:700;color:var(--ink)}
+.badge.strong .bv{font-size:13px}
+/* 4+ badges (e.g. the per-example detector scores) read better as a key/value list than as pills */
+.badges.kv{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 22px;margin:6px 0 3px;max-width:720px}
+.badges.kv .badge{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:1px 1px 2px;
+  background:transparent;border:0;border-bottom:1px dotted var(--hair);border-radius:0;line-height:18px}
+.badges.kv .badge .bl{color:var(--muted);white-space:normal;min-width:0}
+.badges.kv .badge .bv{flex:0 0 auto}
+/* six-detector score strip: the six detectors of the memorization audit, for one example.
+   A cell that fired is marked three ways, so colour alone never carries it: filled background + thicker
+   accent border, a bullet before the detector name, and a bold value. */
+.dstrip{margin:7px 0 3px}
+.dslab{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+.dslab span{font-weight:400;text-transform:none;letter-spacing:0;font-size:11.5px}
+.dgrid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:5px}
+.dcell{border:1px solid var(--hair);border-radius:9px;background:var(--bg);padding:3px 7px 4px;min-width:0}
+.dcell .dn{display:block;font-size:10.5px;line-height:14px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dcell .dm{display:inline-block;width:10px;font-size:9px;line-height:14px;vertical-align:1px}
+.dcell .dv{display:block;font:500 13.5px/17px ui-monospace,Menlo,monospace;color:var(--ink)}
+.dcell .dc{display:block;font:11px/14px ui-monospace,Menlo,monospace;color:var(--muted);white-space:nowrap}
+.dcell.hit{border-color:var(--acc);border-width:1.5px;background:var(--soft);padding:2.5px 6.5px 3.5px}
+.dcell.hit .dn,.dcell.hit .dv{color:var(--acc);font-weight:800}
+.dleg{font-size:12px;color:var(--muted);margin-top:5px;line-height:1.4}
+.dleg b{color:var(--ink);font-weight:700}
+.note{font-size:13px;color:var(--muted);margin:4px 0 4px}
+.group{margin-top:8px;padding-top:6px;border-top:1px dashed var(--hair)}
+.group:first-of-type{border-top:0}
+.glab{font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.03em;text-transform:uppercase;margin-bottom:1px}
+/* one audio row per line, full width (user, 2026-09-12) */
+/* private listening review: keep / drop / note per example, status dots on chips, one copy button */
+#rvbar{position:sticky;top:var(--navh);z-index:40;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;
+  background:var(--card);border:1px solid var(--hair);border-radius:10px;padding:7px 12px;margin:8px 0 0;font-size:13px}
+#rvbar .cnt b{font-family:ui-monospace,Menlo,monospace}
+#rvbar button{font-family:inherit;font-size:12.5px;padding:3px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--bg);color:var(--ink);cursor:pointer}
+#rvbar button.pri{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:700}
+.rv{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 8px;padding:7px 10px;border:1px dashed var(--hair);border-radius:9px;background:var(--bg)}
+.rv .rid{font:700 12px/22px ui-monospace,Menlo,monospace;color:var(--muted)}
+.rv .cur{font-size:11px;color:var(--muted)}
+.rv button{font-family:inherit;font-size:12px;line-height:22px;padding:0 10px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--muted);cursor:pointer}
+.rv button.keep.on{background:var(--good);border-color:var(--good);color:#fff;font-weight:700}
+.rv button.drop.on{background:var(--bad);border-color:var(--bad);color:#fff;font-weight:700}
+.rv input{flex:1 1 220px;min-width:160px;font:12.5px/22px inherit;padding:0 8px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink)}
+.chip .rvd{width:8px;height:8px;border-radius:50%;background:var(--hair);align-self:center}
+.chip .rvd.keep{background:var(--good)}
+.chip .rvd.drop{background:var(--bad)}
+.grid{display:grid;grid-template-columns:minmax(0,1fr);gap:0}
+/* two-column groups (Table 2: prompts side by side, ours left / ACE right) */
+.grid.cols2{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 16px}
+.gcol{min-width:0;padding:2px 0}
+.gcol.c1{padding-left:14px;border-left:1px solid var(--hair)}  /* equal weight: a hairline between the two conditions (user, 2026-09-16) */
+.colh{display:block;font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--ink);margin:2px 0 6px;padding-bottom:3px;border-bottom:2px solid var(--ink)}
+.grid.cols2 .rlab{min-width:150px;max-width:150px}
+.row.g.lst{margin:3px 0}
+.row.g.lst .rlab{width:96px}
+/* per-row detector reading (regeneration seeds): name + value pill, filled when it reproduces the training stem */
+.rlab.has-sc{display:flex;align-items:baseline;gap:5px;white-space:nowrap}   /* pills right-aligned at one x */
+.rlab.has-sc .lt{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.rlab.has-sc .scp{margin-left:auto}
+.scp{display:inline-flex;align-items:baseline;gap:5px;margin-left:8px;padding:0 7px;line-height:18px;vertical-align:1px;
+  border:1px solid var(--hair);border-radius:9px;background:var(--bg);color:var(--muted);white-space:nowrap}
+.scp .scn{font-size:10px;font-weight:700;letter-spacing:.03em}
+.scp .scv{font:700 11.5px/18px ui-monospace,Menlo,monospace;color:var(--ink)}
+.scp.hit{border-color:var(--acc);background:var(--soft)}
+.scp.hit .scn,.scp.hit .scv{color:var(--acc)}
+.row{display:flex;gap:7px;align-items:center;padding:2px 0;min-width:0;--sc:var(--acc);--sct:var(--acc)}
+.play{width:28px;height:28px;min-width:28px;border-radius:50%;border:1.5px solid var(--sc);
+  background:transparent;color:var(--sct);font-size:10px;cursor:pointer;padding:0}
+.play:focus-visible{outline:2px solid var(--acc2);outline-offset:2px}
+.row.playing .play{background:var(--sct);border-color:var(--sct);color:var(--card)}
+.row.err .play{border-color:var(--bad);color:var(--bad);opacity:.6}
+.rlab{min-width:300px;max-width:300px;font-size:12.5px;color:var(--ink);line-height:1.2}
+.rlab .dur{color:var(--muted);white-space:nowrap}
+.sys{display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;line-height:14px;
+  padding:0 5px;border-radius:8px;border:1px solid var(--muted);color:var(--muted);margin:0 4px 1px 0;vertical-align:1px}
+.sys.ctx{color:var(--acc2);border-color:var(--acc2)}
+.sys.prompt{color:var(--acc);border-color:var(--acc)}
+.sys.ours{background:var(--good);border-color:var(--good);color:#fff}
+.sys.ace{background:var(--vio);border-color:var(--vio);color:#fff}
+.sys.real{color:var(--ink);border-color:var(--ink)}
+.sys.mix{color:var(--teal);border-color:var(--teal)}
+.sys.hit{background:var(--bad);border-color:var(--bad);color:#fff}
+.sys.regen{color:var(--good);border-color:var(--good)}
+.sys.ref{color:var(--muted);border-color:var(--hair);background:var(--soft)}
+canvas.wave{flex:1 1 0;width:0;min-width:0;height:32px;cursor:pointer;display:block}
+/* figure-shaped player (Figure 1 cards): narrow conditioning column, wide generated column */
+.genfig{display:grid;grid-template-columns:minmax(0,30fr) 34px minmax(0,70fr);gap:0;margin-top:8px;align-items:stretch}
+.gpanel{display:flex;flex-direction:column;background:var(--bg);border:1px solid var(--hair);border-radius:12px;padding:8px 10px;min-width:0}
+.ptitle{font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.03em;text-transform:uppercase;height:22px;line-height:22px;text-align:center}
+.pspace{flex:1 1 auto;min-height:26px;position:relative}
+.gpanel.right .pspace::before{content:'';position:absolute;left:50%;top:4px;bottom:9px;border-left:2px solid var(--muted)}
+.gpanel.right .pspace::after{content:'';position:absolute;left:50%;bottom:4px;margin-left:-4px;border:4px solid transparent;border-top:6px solid var(--muted);border-bottom:0}
+.row.g{height:46px;gap:6px;border-radius:9px;padding:0 6px;background:var(--card);border:1px solid var(--hair);border-left:4px solid var(--sc);margin:3px 0}
+.row.g .rlab{min-width:0;max-width:none;flex:0 0 auto;width:82px;font-weight:600;font-size:12px;color:var(--sct);white-space:normal}
+.row.g .rlab .dur{display:block;font-weight:400;font-size:10.5px;line-height:1.15}
+.row.g canvas.wave{height:30px}
+.row.g.mix{border-left-color:var(--muted)}
+.gpanel.left .row.g{height:auto;min-height:46px;padding:3px 6px}
+.gpanel.left .row.g .rlab{width:74px;font-size:11.5px}
+.sw{display:inline-flex;border:1px solid var(--hair);border-radius:7px;overflow:hidden;flex:0 0 auto}
+.sw button{font-size:10.5px;line-height:20px;padding:0 6px;border:0;background:transparent;color:var(--muted);cursor:pointer;border-left:1px solid var(--hair)}
+.sw button:first-child{border-left:0}
+.sw button.on{background:var(--sct);color:var(--card);font-weight:700}
+.sw button:focus-visible{outline:2px solid var(--acc2);outline-offset:-2px}
+/* bracket between the two columns (the generator box is deliberately not drawn) */
+.gmid{display:flex;align-items:center;justify-content:center;padding:24px 2px}
+.gbr{position:relative;flex:1 1 auto;align-self:stretch;min-height:44px}
+.gbr::before{content:'';position:absolute;left:3px;top:6%;bottom:6%;border-left:2px solid var(--hair)}
+.gbr .h{position:absolute;left:3px;right:10px;top:50%;height:2px;background:var(--muted)}
+.gbr .h::after{content:'';position:absolute;right:-10px;top:-5px;border:6px solid transparent;border-left:10px solid var(--muted);border-right:0}
+footer{margin-top:36px;padding-top:12px;border-top:1px solid var(--hair);font-size:12.5px;color:var(--muted)}
+#loadMsg{margin:20px 0}
+@media (max-width:760px){
+  body{padding-left:10px;padding-right:10px;font-size:14.5px}
+  .grid{grid-template-columns:minmax(0,1fr)}
+  .rlab{min-width:126px;max-width:126px;font-size:11.5px}
+  .pbody{padding:8px}
+  .genfig{grid-template-columns:minmax(0,1fr)}
+  .gmid{display:none}
+  .gpanel .pspace{min-height:6px}
+  .gpanel.right .pspace::before,.gpanel.right .pspace::after{display:none}
+  .row.g .rlab{width:76px}
+  .sws{gap:6px 5px}
+  .chip{padding:0 8px;white-space:normal}
+  .shead .pref{flex:0 0 100%;margin-left:0;white-space:normal}
+  .badges.kv{grid-template-columns:minmax(0,1fr);max-width:none}
+  .dgrid{grid-template-columns:repeat(3,minmax(0,1fr))}   /* two rows of three */
+  .dcell .dv{font-size:13px}
+}
+/* Paper floats on the demo page: LaTeX tables rendered as HTML (.ptab).
+   Rules for the detector figure that left the page on 2026-09-11 were dropped with it.
+   Tokens mirror template/index.html; memOr/memBl are the paper's memorization colors
+   (RGB 213,94,0 and 0,114,178 in the light theme). ASCII only. */
+:root{--memor:#D55E00;--membl:#0072B2}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--memor:#FF8B42;--membl:#57A8E8}}
+:root[data-theme="dark"]{--memor:#FF8B42;--membl:#57A8E8}
+:root[data-theme="light"]{--memor:#D55E00;--membl:#0072B2}
+
+/* optional scroll wrapper for narrow screens: <div class="ptw"><table class="ptab">... */
+.ptw{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table.ptab{border-collapse:collapse;width:100%;margin:6px 0 2px;
+  font:12.5px/1.35 -apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:var(--ink)}
+table.ptab caption{caption-side:top;text-align:left;font-size:12.5px;font-weight:700;color:var(--muted);
+  letter-spacing:.02em;padding:0 0 5px}
+table.ptab th,table.ptab td{padding:3px 7px;text-align:left;vertical-align:baseline;white-space:nowrap}
+table.ptab td.c,table.ptab th.c{text-align:center}
+table.ptab td.r,table.ptab th.r{text-align:right}
+table.ptab thead th{font-weight:650;color:var(--ink)}
+table.ptab thead tr:first-child th{border-top:1.4px solid var(--ink)}
+table.ptab thead tr:last-child th{border-bottom:1px solid var(--ink)}
+table.ptab th.cmid{border-bottom:1px solid var(--hair);padding-bottom:2px}
+table.ptab tbody tr.sep>*{border-top:1px solid var(--ink)}
+table.ptab tbody tr.sepl>*{border-top:1px solid var(--hair)}
+table.ptab tbody tr:last-child>*{border-bottom:1.4px solid var(--ink)}
+table.ptab tbody th{font-weight:400}
+table.ptab tbody th[rowspan]{font-weight:650;vertical-align:middle}
+table.ptab th.grp{font-weight:400;color:var(--muted);padding-top:6px;white-space:normal}
+table.ptab th.grp em{font-style:italic;color:var(--ink)}
+table.ptab tbody tr.ind th:first-child{padding-left:20px;white-space:normal}
+table.ptab .sc{font-size:10.5px;color:var(--muted);margin-left:1px}
+table.ptab .mo{color:var(--memor)}
+table.ptab .mb{color:var(--membl)}
+table.ptab b{font-weight:700}
+table.ptab tfoot td,table.ptab tfoot th{border-top:0;padding-top:5px;font-size:11px;color:var(--muted);white-space:normal}
+@media (max-width:640px){table.ptab{font-size:11.5px}table.ptab th,table.ptab td{padding:2.5px 5px}
+  table.ptab tbody tr.ind th:first-child{padding-left:12px}}
+/* the float summary already prints "Table 3 - Human verdicts...", so the table's own
+   <caption> is kept for assistive technology (accessible table name) but not painted. */
+.pbody table.ptab>caption{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;
+  clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;border:0}
 </style>
 </head>
 <body>
-<h1>Tracing Inputs, Verifying Outputs: Validating Attribution in Music Generation</h1>
-<p class="sub">Audio examples for the paper. Generator: MixAudio. Memorization detector: musicDNA.</p>
+<nav id="nav"><a class="brand" href="#top" id="brand"></a><span id="navLinks"></span><span class="sp"></span><button id="theme" type="button" title="Color theme">Theme: auto</button></nav>
 
-<section>
-<h2>Abstract</h2>
-<p>How can we verify whose music contributed to an AI-generated output? This paper demonstrates how input-based attribution can provide verifiable evidence of which audio sources were used in a generation and whether they shaped the output. To do so, we condition the generation solely on audio without any text input, then trace the inputs behind each output, and establish their musical effect. In prompt adherence tests and controlled input swaps, the stems generated by our generator, MixAudio, follow the prompt audio in timbre and the context audio in harmony. Yet these outputs may still reproduce training data not supplied as inputs. We therefore audit memorization with our musical version identification model, musicDNA, and find few reproductions outside the input records. On human-judged cases within the flagged pool, it achieves higher precision and recall than the other tested memorization detectors. The two evaluations suggest that input records and output analysis provide complementary evidence for attribution, on which rights-holder reporting and compensation can draw as the AI music economy takes shape.</p>
-</section>
+<header id="top">
+<h1 id="pageTitle"></h1>
+<p class="authors" id="authors"></p>
+<p class="muted sub" id="subtitle"></p>
+<div class="intro" id="overview" style="margin-top:8px"></div>
+<p class="muted" id="keysNote" style="font-size:12px;margin-top:4px"><kbd>Space</kbd> stop &nbsp; <kbd>&larr;</kbd> <kbd>&rarr;</kbd> seek 1 s, or switch example while an example chip has focus &nbsp;&middot;&nbsp; click a waveform to play from there. Headphones recommended.</p>
+</header>
 
-<section>
-<h2>Audio examples</h2>
-<p class="todo">Examples are being prepared. Each example will present the prompt excerpt, the context mix, the generated stem, and the generated stem mixed with the context.</p>
-<div class="card">
-  <h3>Example 1</h3>
-  <p>Prompt</p><audio controls src="audio/ex1_prompt.wav"></audio>
-  <p>Context</p><audio controls src="audio/ex1_context.wav"></audio>
-  <p>Generated stem</p><audio controls src="audio/ex1_generated.wav"></audio>
-  <p>Generated stem with context</p><audio controls src="audio/ex1_mix.wav"></audio>
-</div>
-</section>
+<main id="main"><p id="loadMsg" class="muted">Loading&hellip;</p></main>
 
-<section>
-<h2>Paper</h2>
-<p>arXiv link to be added.</p>
-</section>
+<footer id="foot"></footer><div class="muted" id="stamp">build 9b40f9a2</div>
+
+<script>
+'use strict';
+// -- state and constants --
+let D = null, actx = null, current = null;
+const bufs = new Map();          // audio url -> decoded buffer; kept across example switches
+const WAVES = [];                // [canvas, peaks] of every wired row (detached ones are skipped)
+let WCOL = null;                 // while a card body is being built: collect its waves
+const PLAY = '\u25B6', PAUSE = '\u275A\u275A';
+const SYS = {ctx: 'Context', prompt: 'Prompt', ours: 'Ours', ace: 'ACE', real: 'Real', mix: 'Mix', hit: 'Training match', regen: 'Regenerated', ref: 'Reference'};
+const SWL = {ours: 'Ours', ace: 'ACE', real: 'Real', solo: 'Solo', mix: 'Mix'};
+// Section id -> inline figure, used only if data.json carries no float blocks for the section.
+// Paper Figure 1 lives in the generation section, paper Figure 2 (verdict tree) in the memorization section.
+// Both are inlined by demo_build.py (D.figures.fig1_svg / D.figures.tree_svg) from the paper's own files.
+const FIG_AT = {gen: 'fig1', mem: 'tree'};
+// Section id -> card layout: figure = the figure-shaped player, list = the compact row list.
+const LAYOUT_AT = {gen: 'figure'};
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+const slug = s => String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+const titleize = s => String(s == null ? '' : s).split('_').filter(Boolean).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+
+// -- theme --
+const THEME_KEY = 'demo_theme';
+const THEMES = ['auto', 'light', 'dark'];
+const store = {get(){ try { return localStorage.getItem(THEME_KEY); } catch (e) { return null; } },
+               set(v){ try { localStorage.setItem(THEME_KEY, v); } catch (e) {} }};
+function applyTheme(t){
+  if (t === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', t);
+  store.set(t);
+  document.getElementById('theme').textContent = 'Theme: ' + t;
+  redrawAll();
+}
+document.getElementById('theme').onclick = () => {
+  const cur = store.get() || 'auto';
+  applyTheme(THEMES[(THEMES.indexOf(cur) + 1) % THEMES.length]);
+};
+applyTheme(THEMES.includes(store.get()) ? store.get() : 'auto');
+
+// -- audio engine (from the listening-test page) --
+function redrawAll(){ WAVES.forEach(w => { if (!current || current.args[2] !== w[0]) drawWave(w[0], w[1]); }); }
+window.addEventListener('resize', redrawAll);
+function stopAll(){ if (current){ try { current.stop(); } catch (e) {} current = null; } }
+function ensureCtx(){
+  if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+  if (actx.state === 'suspended') actx.resume();
+}
+async function getBuf(url){
+  if (bufs.has(url)) return bufs.get(url);
+  const r = await fetch(url);
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const b = await actx.decodeAudioData(await r.arrayBuffer());
+  bufs.set(url, b);
+  return b;
+}
+function drawWave(cv, pkB64, prog){
+  const raw = atob(pkB64);
+  const dpr = window.devicePixelRatio || 1;
+  const W = cv.clientWidth, H = cv.clientHeight;
+  if (!W) return;
+  if (cv.width !== W * dpr){ cv.width = W * dpr; cv.height = H * dpr; }
+  const g = cv.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, W, H);
+  const cs = getComputedStyle(document.documentElement);
+  const cRow = getComputedStyle(cv).getPropertyValue('--sc').trim();
+  const cAcc = cRow || cs.getPropertyValue('--acc').trim(), cHair = cs.getPropertyValue('--hair').trim(),
+        cMut = cs.getPropertyValue('--muted').trim();
+  const n = raw.length, bw = W / n;
+  g.fillStyle = cHair; g.fillRect(0, H / 2 - .5, W, 1);
+  for (let i = 0; i < n; i++){
+    const v = raw.charCodeAt(i) / 255, bh = Math.max(1, v * (H - 4));
+    g.fillStyle = (prog !== undefined && i / n <= prog) ? cAcc : cMut;
+    g.fillRect(i * bw, (H - bh) / 2, Math.max(.8, bw - .6), bh);
+  }
+}
+async function playRow(url, rowEl, cv, pk, offset){
+  ensureCtx();
+  if (current && current.url === url && offset === undefined){ stopAll(); return; }
+  stopAll();
+  rowEl.classList.add('playing');
+  const btn = rowEl.querySelector('.play');
+  btn.textContent = PAUSE;
+  let stopped = false, raf = 0, src = null;
+  const cur = { url, args: [url, rowEl, cv, pk], stop(){ stopped = true; cancelAnimationFrame(raf);
+      if (src){ try { src.stop(); } catch (e) {} }
+      rowEl.classList.remove('playing'); btn.textContent = PLAY; drawWave(cv, pk); } };
+  current = cur;
+  let buf;
+  try { buf = await getBuf(url); } catch (e) { rowEl.classList.add('err'); btn.title = 'Could not load ' + url; if (current === cur) stopAll(); return; }
+  if (stopped || current !== cur) return;
+  src = actx.createBufferSource();
+  src.buffer = buf; src.connect(actx.destination);
+  const off = offset || 0, t0 = actx.currentTime - off;
+  cur.pos = () => actx.currentTime - t0; cur.dur = buf.duration;
+  src.start(0, off);
+  src.onended = () => { if (current === cur) stopAll(); };
+  (function tick(){
+    if (stopped || current !== cur) return;
+    const p = (actx.currentTime - t0) / buf.duration;
+    drawWave(cv, pk, p);
+    raf = requestAnimationFrame(tick);
+  })();
+}
+// Wire a play button and a waveform canvas to a mutable clip; sel() returns the current [name, peaks, dur].
+function wireRow(div, sel){
+  const cv = div.querySelector('canvas'), btn = div.querySelector('.play');
+  const url = () => 'audio/' + sel()[0] + '.mp3';
+  btn.onclick = () => {
+    // E2 (user, 2026-09-16): pressing play on another row of the same card while one plays continues from
+    // 0.5 s before the current playhead, so the two conditions are compared at the same spot. Prompt excerpts
+    // (1-2 s, their own time axis) are left out on both sides.
+    let at;
+    const my = div.closest('.card'), other = current && current.args ? current.args[1] : null;
+    if (other && other !== div && my && my.dataset.syncplay && other.closest && other.closest('.card') === my && current.pos &&
+        div.dataset.sys !== 'prompt' && other.dataset.sys !== 'prompt'){
+      const len = Number(sel()[2]) || 0;
+      at = Math.max(0, Math.min(current.pos() - 0.5, Math.max(0, len - 0.05)));
+    }
+    playRow(url(), div, cv, sel()[1], at);
+  };
+  cv.onclick = async ev => {
+    ensureCtx();
+    let buf; try { buf = await getBuf(url()); } catch (e) { div.classList.add('err'); return; }
+    const r = ev.target.getBoundingClientRect();
+    playRow(url(), div, cv, sel()[1], (ev.clientX - r.left) / r.width * buf.duration);
+  };
+  const w = [cv, sel()[1]];
+  WAVES.push(w);
+  if (WCOL) WCOL.push(w);
+  requestAnimationFrame(() => drawWave(cv, w[1]));
+  return w;
+}
+function audioRow(row){
+  const [name, pk, dur] = row.clip;
+  const sys = /^[a-z]+$/.test(row.sys || '') ? row.sys : 'ref';
+  const div = document.createElement('div');
+  div.className = 'row'; div.dataset.sys = sys;
+  const sc = row.score && isFinite(Number(row.score.value)) ? row.score : null;
+  const pill = sc ? `<span class="scp${sc.hit ? ' hit' : ''}" title="${esc(sc.name)} distance to the retrieved training stem` +
+    (sc.cut != null ? `, reproduces at or below ${esc(sc.cut)}` : '') + `"><span class="scn">${esc(sc.name)}</span>` +
+    `<span class="scv">${esc(Number(sc.value).toFixed(2))}</span></span>` : '';
+  div.innerHTML = `<button class="play" type="button" title="play / stop" aria-label="play ${esc(row.label)}">${PLAY}</button>` +
+    `<div class="rlab${sc ? ' has-sc' : ''}"><span class="sys ${sys}">${esc(SYS[sys] || sys)}</span><span class="lt">${esc(row.label)} <span class="dur">${esc(dur)} s</span></span>${pill}</div>` +
+    `<canvas class="wave" title="play from here"></canvas>`;
+  wireRow(div, () => row.clip);
+  return div;
+}
+// A figure-style row: colored, optional system switch selecting among {ours, ace, real} clips.
+function genRow(label, paint, opts, extraClass, cap, link){
+  // link = {cur, rows, set}: rows of one card that switch together (user, 2026-09-14). Clicking Solo / Mix or
+  // ours / ACE / real on any row applies to every linked row that offers that key.
+  const div = document.createElement('div');
+  div.className = 'row g' + (extraClass ? ' ' + extraClass : '');
+  div.style.setProperty('--sc', paint.acc); div.style.setProperty('--sct', paint.ink);
+  const keys = Object.keys(opts);
+  let curKey = (link && link.cur && keys.includes(link.cur)) ? link.cur : keys[0];
+  const clip = () => opts[curKey].clip;
+  const dur = () => (cap ? esc(cap) + ' &middot; ' : '') + esc(clip()[2]) + ' s';
+  div.innerHTML = `<button class="play" type="button" title="play / stop" aria-label="play ${esc(label)}">${PLAY}</button>` +
+    `<div class="rlab">${esc(label)}<span class="dur">${dur()}</span></div>` +
+    `<canvas class="wave" title="play from here"></canvas>` +
+    (keys.length > 1 ? '<div class="sw" role="group" aria-label="system">' +
+      keys.map(k => `<button type="button" data-k="${esc(k)}" class="${k === curKey ? 'on' : ''}">${esc(SWL[k] || k)}</button>`).join('') + '</div>' : '');
+  const w = wireRow(div, clip);
+  const apply = k => {
+    if (!(k in opts) || k === curKey) return;
+    // Switching while this row plays keeps it playing, from the same playhead: the clips share the
+    // section's time axis, so the variants can be compared without restarting.
+    let at = null;
+    if (current && current.args[1] === div){ at = current.pos ? current.pos() : 0; stopAll(); }
+    curKey = k;
+    div.querySelectorAll('.sw button').forEach(x => x.classList.toggle('on', x.dataset.k === k));
+    div.querySelector('.dur').innerHTML = dur();
+    w[1] = clip()[1]; drawWave(w[0], w[1]);
+    if (at !== null){
+      const len = Number(clip()[2]) || 0;
+      playRow('audio/' + clip()[0] + '.mp3', div, w[0], w[1], Math.max(0, Math.min(at, Math.max(0, len - 0.05))));
+    }
+  };
+  if (link){
+    link.rows = link.rows || [];
+    link.rows.push(apply);
+    if (!link.set) link.set = k => { link.cur = k; link.rows.forEach(fn => fn(k)); };
+  }
+  div.querySelectorAll('.sw button').forEach(b => b.onclick = () => (link ? link.set(b.dataset.k) : apply(b.dataset.k)));
+  return div;
+}
+// Paint of stem i: the accent is the Figure 1 pill stroke, the ink its pill text (see the token block).
+const stemPaint = i => ({acc: `var(--s${i % 6})`, ink: `var(--s${i % 6}t)`});
+// Context keeps the figure's blue; the mix row is neutral, as the figure paints "One mix" in ink.
+const CTX_PAINT = {acc: 'var(--ctxc)', ink: 'var(--ctxt)'}, MIX_PAINT = {acc: 'var(--ink)', ink: 'var(--ink)'};
+// -- inline figures (theme-aware via CSS variables) --
+function wavePath(x, y, n, amp){
+  let d = `M${x} ${y}`;
+  for (let i = 0; i < n; i++) d += ` q5 ${-amp} 10 0 q5 ${amp} 10 0`;
+  return d;
+}
+function figConcept(){
+  const P = ['Prompt 1', 'Prompt 2', 'Prompt N'], S = ['Stem 1', 'Stem 2', 'Stem N'];
+  const ys = [64, 104, 158];
+  const pill = (x, y, w, p, txt) => `<rect x="${x}" y="${y}" width="${w}" height="30" rx="7" fill="${p.acc}" fill-opacity=".12" stroke="${p.acc}" stroke-width="1.3"/>` +
+    `<path d="${wavePath(x + 12, y + 15, 3, 7)}" fill="none" stroke="${p.acc}" stroke-width="1.6" stroke-linecap="round"/>` +
+    `<text x="${x + w - 12}" y="${y + 15}" text-anchor="end" dominant-baseline="central" font-size="13" font-weight="600" fill="${p.ink}">${txt}</text>`;
+  const dots = (x, y) => `<circle cx="${x}" cy="${y - 8}" r="1.8" fill="var(--muted)"/><circle cx="${x}" cy="${y}" r="1.8" fill="var(--muted)"/><circle cx="${x}" cy="${y + 8}" r="1.8" fill="var(--muted)"/>`;
+  let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 290" role="img" aria-label="Concept figure: registered prompts and context go into the any-stem generator, which produces one stem per prompt; the generated stems and the context sum to one mix">`;
+  s += `<defs><marker id="carr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1L9 5L1 9z" fill="var(--muted)"/></marker></defs>`;
+  s += `<g font-family="inherit">`;
+  // left panel
+  s += `<rect x="16" y="14" width="260" height="262" rx="12" fill="var(--bg)" stroke="var(--hair)"/>`;
+  s += `<text x="146" y="36" text-anchor="middle" dominant-baseline="central" font-size="15" font-weight="700" fill="var(--ink)">Registered audio</text>`;
+  P.forEach((t, i) => { s += pill(40, ys[i], 212, stemPaint(i), t); });
+  s += dots(146, 141);
+  s += `<rect x="40" y="222" width="212" height="34" rx="7" fill="var(--ctxc)" fill-opacity=".12" stroke="var(--ctxc)" stroke-width="1.3"/>`;
+  s += `<path d="${wavePath(52, 239, 6, 9)}" fill="none" stroke="var(--ctxc)" stroke-width="1.6" stroke-linecap="round"/>`;
+  s += `<text x="240" y="239" text-anchor="end" dominant-baseline="central" font-size="13" font-weight="600" fill="var(--ctxt)">Context</text>`;
+  // center block
+  s += `<line x1="276" y1="126" x2="318" y2="126" stroke="var(--muted)" stroke-width="2" marker-end="url(#carr)"/>`;
+  s += `<rect x="322" y="76" width="140" height="100" rx="12" fill="var(--ink)"/>`;
+  s += `<text x="392" y="116" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="700" fill="var(--bg)">Any-stem</text>`;
+  s += `<text x="392" y="138" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="700" fill="var(--bg)">generator</text>`;
+  s += `<line x1="462" y1="126" x2="504" y2="126" stroke="var(--muted)" stroke-width="2" marker-end="url(#carr)"/>`;
+  // right panel
+  s += `<rect x="508" y="14" width="236" height="196" rx="12" fill="var(--bg)" stroke="var(--hair)"/>`;
+  s += `<text x="626" y="36" text-anchor="middle" dominant-baseline="central" font-size="15" font-weight="700" fill="var(--ink)">Generated stems</text>`;
+  S.forEach((t, i) => { s += pill(528, ys[i], 196, stemPaint(i), t); });
+  s += dots(626, 141);
+  // sum node and one mix
+  s += `<line x1="626" y1="210" x2="626" y2="228" stroke="var(--muted)" stroke-width="2" marker-end="url(#carr)"/>`;
+  s += `<line x1="252" y1="239" x2="608" y2="239" stroke="var(--muted)" stroke-width="2" marker-end="url(#carr)"/>`;
+  s += `<circle cx="626" cy="239" r="13" fill="var(--card)" stroke="var(--muted)" stroke-width="1.6"/>`;
+  s += `<text x="626" y="239" text-anchor="middle" dominant-baseline="central" font-size="17" font-weight="700" fill="var(--muted)">+</text>`;
+  s += `<line x1="639" y1="239" x2="662" y2="239" stroke="var(--muted)" stroke-width="2" marker-end="url(#carr)"/>`;
+  s += `<text x="668" y="239" dominant-baseline="central" font-size="14" font-weight="700" fill="var(--ink)">One mix</text>`;
+  s += `</g></svg>`;
+  return s;
+}
+// Inline figures shipped in data.json. Figure 1 falls back to the schematic drawn above; the verdict tree
+// (paper Figure 2, template/decision_tree_v3.svg) has no fallback - without it the float block is skipped.
+const FIGS = {fig1: () => (D.figures && D.figures.fig1_svg) || figConcept(),
+              tree: () => (D.figures && D.figures.tree_svg) || ''};
+
+// -- paper float blocks (collapsible; the reader can look at the float while listening) --
+function floatBlock(blk){
+  const d = document.createElement('details');
+  d.className = 'pfloat';
+  d.open = blk.open !== false;
+  const kind = blk.kind === 'table' ? 'table' : 'figure';
+  d.innerHTML = `<summary><span class="cv"></span><span class="fchip sm">${esc(blk.label || '')}</span>` +
+    `<span class="ft">${esc(blk.title || '')}</span></summary>`;
+  const body = document.createElement('div');
+  body.className = 'pbody ' + (kind === 'table' ? 'ptabs' : 'pfig');
+  const figKey = blk.figure || '';
+  const fig = (figKey && FIGS[figKey]) ? FIGS[figKey]() : '';
+  if (fig) body.innerHTML = fig;
+  else if (blk.html) body.innerHTML = kind === 'table' ? '<div class="ptw">' + blk.html + '</div>' : blk.html;
+  else return null;
+  // captions are not shown (user, 2026-09-16)
+  d.appendChild(body);
+  return d;
+}
+
+// -- cards --
+// Six-detector score strip: the six detectors of the audit (the same names and thresholds the paper reports),
+// for this one example. c.detectors = [{det, name, value, cut, flagged, distance}] in the order cards.json
+// gives them (the audit's order); absent -> nothing is drawn.
+const dnum = v => { const x = Number(v); return Math.abs(x) >= 100 ? x.toFixed(1) : x.toFixed(3); };
+// c.moves = [{metric, statement, expect, cells:[{system, base, swap, delta}]}] - what the swap did to the
+// measurements the paper's Table 2 reports. 'expect' is the paper's hypothesis for this row.
+function moveTable(c){
+  const rows = (c.moves || []).filter(r => r && r.statement && (r.cells || []).length);
+  if (!rows.length) return '';
+  const EXP = {up: 'should rise', down: 'should fall', flat: 'should stay put'};
+  const ok = (d, e) => e === 'up' ? d >= 0.05 : e === 'down' ? d <= -0.05 : Math.abs(d) < 0.1;
+  let h = '<div class="mvs"><table class="mtab"><thead><tr><th>What the swap should do</th>' +
+    '<th class="n">Before &rarr; after</th></tr></thead><tbody>';
+  rows.forEach(r => {
+    const cells = r.cells.map(x => {
+      const d = Number(x.delta), good = ok(d, r.expect);
+      return `<div><span class="sysn">${esc(x.system)}</span> ${esc(Number(x.base).toFixed(2))}` +
+        `<span class="ar">&rarr;</span>${esc(Number(x.swap).toFixed(2))} ` +
+        `<span class="dl ${good ? 'good' : 'meh'}">${d >= 0 ? '+' : ''}${esc(d.toFixed(2))}</span></div>`;
+    }).join('');
+    h += `<tr><td><span class="mm">${esc(r.metric)}</span>${esc(r.statement)} ` +
+      `<span class="sysn">(${esc(EXP[r.expect] || '')})</span></td><td class="n">${cells}</td></tr>`;
+  });
+  h += '</tbody></table><div class="mleg">MFCC is a timbre similarity, chroma a harmony correlation; ' +
+    'both run from &minus;1 to 1. Before = the generation from the original conditioning, after = the ' +
+    'regeneration once the marked input was replaced.</div></div>';
+  return h;
+}
+function detStrip(c){
+  const ds = (c.detectors || []).filter(d => d && d.name && isFinite(Number(d.value)) && isFinite(Number(d.cut)));
+  if (!ds.length) return '';
+  const cells = ds.map(d => {
+    const on = !!d.flagged, op = d.distance ? '\u2264' : '\u2265';
+    const tip = `${d.name} ${dnum(d.value)}, threshold ${op} ${dnum(d.cut)} (${d.distance ? 'distance' : 'similarity'}): ` +
+      (on ? 'fired' : 'did not fire');
+    return `<div class="dcell${on ? ' hit' : ''}" title="${esc(tip)}">` +
+      `<span class="dn">${esc(d.name)}</span>` +
+      `<span class="dv">${dnum(d.value)}</span><span class="dc">${op} ${dnum(d.cut)}</span></div>`;
+  }).join('');
+  // No legend line (user, 2026-09-12): the fired cells are already marked in the strip itself.
+  return `<div class="dstrip" role="group" aria-label="detector scores">` +
+    `<div class="dslab">Detector scores</div>` +
+    `<div class="dgrid">${cells}</div></div>`;
+}
+function cardHead(c){
+  // A card reached through the retriever hierarchy repeats nothing: its identifier, verdict case, rank and
+  // instrument are already on the level buttons and the selected chip (user, 2026-09-12). Only the
+  // six-detector strip stays above the audio.
+  // Every card repeats the selected chip inside the card, large: identifier + chip text (user, 2026-09-16).
+  // E2: 'Prompt replaced: Drums -> Bass' / 'Context replaced (Prompt: Bass)' with the replaced input coloured.
+  // E3 rows already print identifier and instrument, so the expanded card carries no head (user, 2026-09-16).
+  let big = esc(c.hint || c.title || '');
+  if (c.block === 'a') big = `<span class="hl-p">Prompt</span> replaced: ${big}`;
+  else if (c.block === 'b') big = `<span class="hl-c">Context</span> replaced (Prompt: ${big})`;
+  let h = (c.retriever_key && c.kind !== 'regen') ? '' :
+    `<div class="head"><span class="fid">${esc(c.label || c.id)}</span><span class="i">${big}</span>` + (c.sub ? `<span class="s">${esc(c.sub)}</span>` : '') + `</div>`;
+  const noStrip = c.kind === 'regen';   // regeneration cards: head + badges, no detector strip (it is on the E3 card)
+  if (c.badges && c.badges.length){
+    // 1-3 badges: pills. 4+ (the score rows of Table 1) become a compact two-column key/value list.
+    h += `<div class="badges${c.badges.length >= 4 ? ' kv' : ''}">` + c.badges.map(b => `<span class="badge${b.strong ? ' strong' : ''}"><span class="bl">${esc(b.label)}</span>` +
+      (b.value === undefined || b.value === null || b.value === '' ? '' : `<span class="bv">${esc(b.value)}</span>`) + '</span>').join('') + '</div>';
+  }
+  if (c.note) h += `<div class="note">${c.note}</div>`;
+  if (!noStrip) h += detStrip(c);
+  h += moveTable(c);
+  return h;
+}
+function buildCard(c){
+  const card = document.createElement('div'); card.className = 'card' + (c.bare ? ' bare' : ''); card.id = 'card-' + esc(c.id);
+  if (c.block) card.dataset.syncplay = '1';  // E2 cards: continue playback across rows (user, 2026-09-16)
+  card.innerHTML = cardHead(c);
+  // Solo / Mix switches of this card move together; a context-replaced card (block c) opens on the mix.
+  const link = {cur: c.block === 'b' ? 'mix' : 'solo', rows: []};  // b = context replaced (default to the mix)
+  (c.groups || []).forEach(g => {
+    const rows = (g.rows || []).filter(r => Array.isArray(r.clip) && r.clip.length >= 3);
+    if (!rows.length) return;
+    const gd = document.createElement('div'); gd.className = 'group';
+    if (g.label){ const gl = document.createElement('div'); gl.className = 'glab'; gl.textContent = g.label; gd.appendChild(gl); }
+    const byKey = {}; rows.forEach(r => { byKey[r.key] = r; });
+    const visible = rows.filter(r => !r.hidden);
+    // A row with a mix variant (Table 2 generated stems) becomes a switchable row: solo | in the mix.
+    const mk = r => {
+      const mixRow = r.mix_key ? byKey[r.mix_key] : null;
+      if (!mixRow) return audioRow(r);
+      const paint = r.sys === 'ace' ? {acc: 'var(--vio)', ink: 'var(--vio)'} : {acc: 'var(--good)', ink: 'var(--good)'};
+      return genRow(r.label, paint, {solo: r, mix: mixRow}, 'lst', undefined, link);
+    };
+    if (g.cols === 2){
+      const grid = document.createElement('div'); grid.className = 'grid cols2';
+      const cols = [0, 1].map(i => { const d = document.createElement('div'); d.className = 'gcol c' + i; return d; });
+      (g.col_labels || []).forEach((t, i) => { if (cols[i] && t){ const h = document.createElement('div'); h.className = 'colh'; h.textContent = t; cols[i].appendChild(h); } });
+      visible.forEach(r => cols[r.col === 1 ? 1 : 0].appendChild(mk(r)));
+      cols.forEach(d => grid.appendChild(d));
+      gd.appendChild(grid); card.appendChild(gd);
+      return;
+    }
+    const grid = document.createElement('div'); grid.className = 'grid';
+    visible.forEach(r => grid.appendChild(mk(r)));
+    gd.appendChild(grid); card.appendChild(gd);
+  });
+  return card;
+}
+// Figure-shaped player, used by both the any-stem cards (prompt per stem) and the quality cards
+// (one stem, ours / ACE / real): conditioning on the left, generated stems and the mix on the right.
+function buildGenCard(c){
+  const rows = {};
+  const stems = [];
+  (c.groups || []).forEach(g => (g.rows || []).forEach(r => {
+    if (!Array.isArray(r.clip) || r.clip.length < 3) return;
+    const k = r.key || '';
+    rows[k] = r;
+    if (k.indexOf('p_') === 0){
+      const st = k.slice(2);
+      stems.push({g: st, label: slug(g.label) === st ? g.label : titleize(st)});
+    }
+  }));
+  const ctx = rows.ctx;
+  if (!ctx || !stems.length) return buildCard(c);
+  const one = stems.length === 1;
+  // ours / ACE / real of one stem: keyed <sys>_<stem>, or plain <sys> when the card has a single stem.
+  const pick = g => { const o = {}; ['ours', 'ace', 'real'].forEach(s => {
+    const r = rows[s + '_' + g] || (one ? rows[s] : null); if (r) o[s] = r; }); return o; };
+  const card = document.createElement('div'); card.className = 'card' + (c.bare ? ' bare' : ''); card.id = 'card-' + esc(c.id);
+  if (c.block) card.dataset.syncplay = '1';  // E2 cards: continue playback across rows (user, 2026-09-16)
+  card.innerHTML = cardHead(c);
+  const fig = document.createElement('div'); fig.className = 'genfig';
+  const left = document.createElement('div'); left.className = 'gpanel left';
+  left.innerHTML = '<div class="ptitle">Registered audio</div>';
+  const mid = document.createElement('div'); mid.className = 'gmid';
+  mid.innerHTML = '<div class="gbr"><span class="h"></span></div>';
+  const right = document.createElement('div'); right.className = 'gpanel right';
+  right.innerHTML = `<div class="ptitle">Generated stem${one ? '' : 's'}</div>`;
+  const link = {cur: 'ours', rows: []};   // ours / ACE / real: every generated row and the mix switch together
+  stems.forEach((st, i) => {
+    left.appendChild(genRow(st.label, stemPaint(i), {prompt: rows['p_' + st.g]}, '', 'prompt'));
+    const o = pick(st.g);
+    if (Object.keys(o).length) right.appendChild(genRow(st.label, stemPaint(i), o, '', undefined, link));
+  });
+  left.insertAdjacentHTML('beforeend', '<div class="pspace"></div>');
+  left.appendChild(genRow('Context', CTX_PAINT, {ctx: ctx}, '', 'given'));
+  right.insertAdjacentHTML('beforeend', '<div class="pspace"></div>');
+  const mo = {}; ['ours', 'ace', 'real'].forEach(s => { if (rows['mix_' + s]) mo[s] = rows['mix_' + s]; });
+  if (Object.keys(mo).length) right.appendChild(genRow(one ? 'Full mix' : 'One mix', MIX_PAINT, mo, 'mix', undefined, link));
+  fig.appendChild(left); fig.appendChild(mid); fig.appendChild(right);
+  card.appendChild(fig);
+  return card;
+}
+// -- private listening review (D.review): decisions live in this browser, copied out as plain text --
+const RV_KEY = 'iclr_review_v1';
+function rvLoad(){ try { return JSON.parse(localStorage.getItem(RV_KEY) || '{}'); } catch (e) { return {}; } }
+function rvSave(st){ localStorage.setItem(RV_KEY, JSON.stringify(st)); rvRefresh(); }
+function rvAll(){ const out = []; (D.sections || []).forEach(s => (s.cards || []).forEach(c => out.push(c))); return out; }
+function rvRefresh(){
+  const st = rvLoad(), cards = rvAll();
+  let k = 0, d = 0;
+  cards.forEach(c => { const v = st[c.id] || {}; if (v.s === 'keep') k++; else if (v.s === 'drop') d++; });
+  const el = document.getElementById('rvcnt');
+  if (el) el.innerHTML = `<b>${k}</b> keep &nbsp; <b>${d}</b> drop &nbsp; <b>${cards.length - k - d}</b> undecided &nbsp; of ${cards.length}`;
+  document.querySelectorAll('.chip[data-cid]').forEach(ch => {
+    const v = st[ch.dataset.cid] || {}; let dot = ch.querySelector('.rvd');
+    if (!dot){ dot = document.createElement('span'); dot.className = 'rvd'; ch.insertBefore(dot, ch.firstChild); }
+    dot.className = 'rvd' + (v.s ? ' ' + v.s : '');
+  });
+}
+function rvText(){
+  const st = rvLoad(), cards = rvAll(), keep = [], drop = [], und = [], notes = [];
+  cards.forEach(c => { const v = st[c.id] || {};
+    (v.s === 'keep' ? keep : v.s === 'drop' ? drop : und).push(c.id);
+    if (v.n && v.n.trim()) notes.push('note ' + c.id + ': ' + v.n.trim().replace(/\s+/g, ' ')); });
+  return ['keep ' + keep.join(' '), 'drop ' + drop.join(' '), 'undecided ' + und.join(' ')].concat(notes).join('\n') + '\n';
+}
+function rvCopy(){
+  const t = rvText();
+  const done = () => { const b = document.getElementById('rvcopy'); if (b){ b.textContent = 'Copied'; setTimeout(() => { b.textContent = 'Copy selection'; }, 1500); } };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, () => rvFallback(t, done));
+  else rvFallback(t, done);
+}
+function rvFallback(t, done){ const ta = document.createElement('textarea'); ta.value = t; document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); } catch (e) {} document.body.removeChild(ta); done(); }
+function rvStrip(c){
+  const st = rvLoad(), v = st[c.id] || {};
+  const div = document.createElement('div'); div.className = 'rv';
+  div.innerHTML = `<span class="rid">${esc(c.id)}</span><span class="cur">now: ${esc(c.status || 'keep')}</span>` +
+    `<button type="button" class="keep${v.s === 'keep' ? ' on' : ''}">Keep</button>` +
+    `<button type="button" class="drop${v.s === 'drop' ? ' on' : ''}">Drop</button>` +
+    `<input type="text" placeholder="note (optional)" value="${esc(v.n || '')}">`;
+  const set = s => { const st2 = rvLoad(); st2[c.id] = Object.assign({}, st2[c.id] || {}, {s: s}); rvSave(st2);
+    div.querySelector('.keep').classList.toggle('on', s === 'keep'); div.querySelector('.drop').classList.toggle('on', s === 'drop'); };
+  div.querySelector('.keep').onclick = () => set((rvLoad()[c.id] || {}).s === 'keep' ? '' : 'keep');
+  div.querySelector('.drop').onclick = () => set((rvLoad()[c.id] || {}).s === 'drop' ? '' : 'drop');
+  div.querySelector('input').oninput = ev => { const st2 = rvLoad(); st2[c.id] = Object.assign({}, st2[c.id] || {}, {n: ev.target.value}); localStorage.setItem(RV_KEY, JSON.stringify(st2)); };
+  div.addEventListener('keydown', ev => ev.stopPropagation());   // typing a note must not drive the player or the switcher
+  return div;
+}
+function buildBody(sec, card){
+  const layout = sec.layout || LAYOUT_AT[sec.id] || 'list';
+  WCOL = [];
+  const node = layout === 'figure' ? buildGenCard(card) : buildCard(card);
+  if (D.review) node.insertBefore(rvStrip(card), node.firstChild);
+  node.waves = WCOL;
+  WCOL = null;
+  return node;
+}
+
+// -- example switcher: level bars, chips, one card body per panel --
+// A section owns one or more panels. A panel = an optional stack of level bars + a chip row + one card body
+// host, over a subset of the section's cards: the memorization examples form a three-level hierarchy
+// (retriever -> verdict case -> example in retrieval-rank order), the Table 2 examples one level (the a / b / c
+// blocks), and a card kind with its own block (the regeneration gate) gets a panel of its own below them.
+// Card indexes stay global (indexes into sec.cards), so '#mem-T3.3' addresses an example in any panel.
+const SEC = {};   // section id -> {sec, panels, byIdx: Map(card index -> panel)}
+// Known levels, outermost first as named in sec.levels. key() must return a non-empty string for every card
+// of the panel or the whole stack is dropped (a data.json written before these fields falls back to one flat
+// chip row). sub() is the small print on a level button, over the cards that button stands for.
+const LEVELS = {
+  retriever: {head: 'Retriever', mono: false,
+    key: c => c.retriever_key || slug(c.retriever), name: c => c.retriever || titleize(c.retriever_key),
+    sub: cs => { const t = Number((cs.filter(c => Number(c.rank_total) > 0)[0] || {}).rank_total);
+                 return t > 0 ? t + ' flagged' : ''; }},
+  case: {head: 'Human verdict', mono: false,
+    key: c => slug(c.case), name: c => c.case || '',
+    // How many of the retriever's flagged stems got this verdict (paper Table 3), then how many are here.
+    // Just the count of flagged stems with this verdict (paper Table 3); the total sits on the retriever button.
+    sub: cs => { const c0 = cs.filter(c => Number(c.case_total) > 0)[0];
+                 return c0 ? String(Number(c0.case_total)) : ''; }},
+  block: {head: '', mono: true,
+    key: c => c.block || '', name: c => c.block || '', sub: cs => cs[0].block_title || ''},
+};
+function swapIn(host, node){
+  while (host.firstChild) host.removeChild(host.firstChild);
+  host.appendChild(node);
+}
+function setHash(h){
+  // Linkable and reload-safe; replaceState does not scroll and does not grow the history.
+  try { history.replaceState(null, '', '#' + h); } catch (e) {}
+}
+// data.json written before sec.levels existed: the a / b / c blocks are the one level that can be inferred.
+function deriveLevels(cards){
+  const bs = [];
+  cards.forEach(c => { if (c.block && bs.indexOf(c.block) < 0) bs.push(c.block); });
+  return bs.length > 1 ? ['block'] : [];
+}
+function buildPanel(sec, idxs, lvNames, opts){
+  opts = opts || {};
+  const cards = sec.cards;
+  const wrap = document.createElement('div');
+  wrap.className = 'sws'; wrap.setAttribute('role', 'tablist');
+  wrap.setAttribute('aria-label', opts.label || 'examples');
+  const host = document.createElement('div');
+  host.className = 'exhost'; host.id = 'ex-' + sec.id + (opts.suffix || '');
+  host.setAttribute('role', 'tabpanel'); host.setAttribute('aria-label', 'selected example');
+  let lvs = (lvNames || []).map(n => ({name: n, d: LEVELS[n]})).filter(x => x.d);
+  const path = new Map();
+  idxs.forEach(gi => path.set(gi, lvs.map(x => String(x.d.key(cards[gi]) || ''))));
+  if (!idxs.every(gi => path.get(gi).every(Boolean))){        // a card without a level key: flat fallback
+    lvs = [];
+    idxs.forEach(gi => path.set(gi, []));
+  }
+  const P = {sec: sec, idxs: idxs, host: host, wrap: wrap, lvs: lvs, path: path,
+             bars: [], chips: [], nodes: new Map(), idx: -1};
+  // 2026-09-21 (user): an own-kind block with a single example (the regeneration gate, one Type I case) shows no
+  // chip row; the card head already carries the identifier and the chip text, and the rank sits on the card badge.
+  P.noChips = !!(opts && opts.suffix) && idxs.length === 1;
+  P.active = () => path.get(P.idx >= 0 ? P.idx : idxs[0]) || [];
+  // do the first n level keys of this card agree with the selected one?
+  P.match = (gi, n) => { const a = P.active(), b = path.get(gi) || [];
+    for (let i = 0; i < n; i++) if (a[i] !== b[i]) return false;
+    return true; };
+  lvs.forEach((x, d) => {
+    if (x.d.head){
+      const h = document.createElement('span'); h.className = 'lvh'; h.textContent = x.d.head;
+      wrap.appendChild(h);
+    }
+    const bar = document.createElement('div');
+    bar.className = 'blks' + (d ? ' sub' : '');
+    const items = [];
+    idxs.forEach(gi => {                                     // one button per distinct key path, in order
+      const k = path.get(gi).slice(0, d + 1).join('|');
+      let it = items.filter(y => y.k === k)[0];
+      if (!it){ it = {k: k, members: [], btn: null}; items.push(it); }
+      it.members.push(gi);
+    });
+    items.forEach(it => {
+      const cs = it.members.map(gi => cards[gi]);
+      const sub = x.d.sub ? x.d.sub(cs) : '';
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'blk';
+      b.innerHTML = `<span class="${x.d.mono ? 'bk' : 'bn'}">${esc(x.d.name(cs[0]) || '')}</span>` +
+        (sub ? `<span class="bt">${esc(sub)}</span>` : '');
+      b.onclick = () => P.select(it.members[0], {focus: true});   // land on the first example below it
+      it.btn = b;
+      bar.appendChild(b);
+    });
+    wrap.appendChild(bar);
+    P.bars.push({d: d, items: items});
+  });
+  if (lvs.length){
+    const h = document.createElement('span'); h.className = 'lvh';
+    h.textContent = lvs.some(x => x.name === 'retriever') ? 'Examples, closest retrieval first' : 'Examples';
+    wrap.appendChild(h);
+  }
+  if (P.noChips) wrap.hidden = true;                          // single-example own block: no chip row at all
+  const grouped = (sec.floats || []).length > 1 && !lvs.length && !(opts && opts.suffix);  // no float label inside an own-kind panel (regeneration gate; user, 2026-09-16)
+  let prev = null, first = true, prevSub = null;
+  P.glabels = [];
+  idxs.forEach(gi => {
+    const c = cards[gi];
+    if (grouped && c.float && c.float !== prev){              // flat switcher over merged floats: group label
+      const g = document.createElement('span');
+      g.className = 'swg' + (first ? ' first' : '');
+      g.textContent = c.float + (c.float_title ? ' \u00b7 ' + c.float_title : '');
+      wrap.appendChild(g); first = false;
+    }
+    prev = c.float;
+    if (c.subgroup && (c.subgroup + '|' + (c.block || '')) !== prevSub){   // E2 block a: 'Different instrument' / 'Same instrument' (user, 2026-09-16)
+      const g = document.createElement('span'); g.className = 'swg sub'; g.textContent = c.subgroup; g.dataset.block = c.block || '';
+      wrap.appendChild(g); P.glabels.push(g);
+    }
+    prevSub = c.subgroup ? c.subgroup + '|' + (c.block || '') : null;
+    const rank = (Number(c.rank) > 0 && Number(c.rank_total) > 0) ? 'rank ' + c.rank + ' / ' + c.rank_total : '';
+    const ownCase = c.case && !lvs.some(x => x.name === 'case');   // the case level already prints it
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'chip';
+    b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', 'false');
+    b.setAttribute('aria-controls', host.id);
+    b.tabIndex = -1;
+    b.title = (c.retriever ? c.retriever + ' \u00b7 ' : '') + (c.case ? c.case + ' \u00b7 ' : '') +
+      (c.title || '') + (rank ? ' \u00b7 ' + rank : '');
+    b.innerHTML = `<span class="cid">${esc(c.label || c.id)}</span>` +
+      (ownCase ? `<span class="ccase">${esc(c.case)}</span>` : '') +
+      (c.hint ? `<span class="chint">${c.kind === 'regen' && c.hint.includes(' \u00b7 ') ? '<b>' + esc(c.hint.split(' \u00b7 ')[0]) + '</b> \u00b7 ' + esc(c.hint.split(' \u00b7 ').slice(1).join(' \u00b7 ')) : esc(c.hint)}</span>` : '') +
+      (rank ? `<span class="crank">${esc(rank)}</span>` : '');
+    b.onclick = () => P.select(gi, {focus: true});
+    b.dataset.cid = c.id;
+    P.chips.push(b);
+    wrap.appendChild(b);
+  });
+  P.sync = () => {
+    P.chips.forEach((b, j) => {
+      const gi = idxs[j], on = gi === P.idx;
+      b.hidden = P.noChips || !P.match(gi, P.lvs.length);     // only the chips of the active key path (none for a single-example own block)
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+      b.tabIndex = on ? 0 : -1;
+    });
+    (P.glabels || []).forEach(g => { g.hidden = P.lvs.length ? (P.active()[0] !== g.dataset.block) : false; });  // sub-group labels of the active block only
+    P.bars.forEach(bar => bar.items.forEach(it => {
+      it.btn.hidden = !P.match(it.members[0], bar.d);         // level 2+ shows only the active parent's keys
+      it.btn.classList.toggle('on', P.match(it.members[0], bar.d + 1));
+    }));
+  };
+  P.select = (gi, o) => {
+    o = o || {};
+    if (idxs.indexOf(gi) < 0 || !cards[gi]) return;
+    if (P.idx !== gi){
+      stopAll();                                              // never leave an example playing behind the reader
+      P.idx = gi;
+      let node = P.nodes.get(gi);
+      if (!node){ node = buildBody(sec, cards[gi]); P.nodes.set(gi, node); }
+      swapIn(host, node);
+      P.sync();
+      requestAnimationFrame(() => (node.waves || []).forEach(w => drawWave(w[0], w[1])));
+    }
+    const j = idxs.indexOf(gi);
+    if (o.focus && P.chips[j]) P.chips[j].focus({preventScroll: true});
+    if (o.hash !== false) setHash(sec.id + '-' + (cards[gi].label || cards[gi].id));
+  };
+  wrap.addEventListener('keydown', ev => {
+    const k = ev.key;
+    if (k !== 'ArrowLeft' && k !== 'ArrowRight' && k !== 'Home' && k !== 'End') return;
+    ev.preventDefault(); ev.stopPropagation();                // arrows move between examples, not the playhead
+    const vis = idxs.filter(gi => P.match(gi, P.lvs.length)); // the innermost level only
+    if (!vis.length) return;
+    const at = Math.max(0, vis.indexOf(P.idx)), n = vis.length;
+    let gi;
+    if (k === 'Home') gi = vis[0];
+    else if (k === 'End') gi = vis[n - 1];
+    else gi = vis[(at + (k === 'ArrowLeft' ? -1 : 1) + n) % n];
+    P.select(gi, {focus: true});
+  });
+  const el = document.createElement('div');
+  el.className = opts.title ? 'pnl kblk' : 'pnl';
+  if (opts.title){
+    const t = document.createElement('div'); t.className = 'kbt'; t.innerHTML = esc(opts.title).replace(/Type\s+I\b(?!I)/, '<span class="hlt1">Type I</span>');  // orange like Figure 2 (user, 2026-09-16)
+    el.appendChild(t);
+    if (opts.sub){
+      const sb = document.createElement('div'); sb.className = 'kbs'; sb.textContent = opts.sub;
+      el.appendChild(sb);
+    }
+  }
+  el.appendChild(wrap); el.appendChild(host);
+  P.el = el;
+  return P;
+}
+// Verdict-case tag class: Type I / II orange (the uncovered memorizations of Figure 2), A blue (other
+// memorization), D violet, B / C grey (not memorization).
+function caseClass(cs){
+  const t = String(cs || '');
+  if (/type\s*ii\b/i.test(t)) return 't2';
+  if (/type\s*i\b/i.test(t)) return 't1';
+  const m = /^\s*([abcd])\b/i.exec(t);
+  return m ? m[1].toLowerCase() : '';
+}
+const CASE_RANK = {t1: 0, t2: 1, a: 2, b: 3, c: 4, d: 5, '': 9};
+// E3 as a ranked list (user, 2026-09-16): retriever buttons, verdict-case filters, then every example of the
+// retriever as one row in retrieval-rank order (closest first, gaps marked); a row expands into its card.
+function buildRankedPanel(sec, idxs, opts){
+  opts = opts || {};
+  const cards = sec.cards;
+  const wrap = document.createElement('div'); wrap.className = 'sws';
+  const rets = [];
+  idxs.forEach(gi => {
+    const c = cards[gi], k = c.retriever_key || slug(c.retriever);
+    let r = rets.filter(x => x.k === k)[0];
+    if (!r){ r = {k: k, name: c.retriever || titleize(k), members: []}; rets.push(r); }
+    r.members.push(gi);
+  });
+  const P = {sec: sec, idxs: idxs, wrap: wrap, nodes: new Map(), idx: -1, ret: rets.length ? rets[0].k : '', filt: new Set(), chips: []};
+  const scoreOf = c => {
+    const d = (c.detectors || []).filter(x => x.det === (c.retriever_key || '') || slug(x.name) === slug(c.retriever))[0];
+    if (!d || d.value === undefined || d.value === null) return '';
+    const sign = d.distance ? '\u2264' : '\u2265';  // flagged when distance <= cut, or similarity >= cut
+    return `<b class="sv">${Number(d.value).toFixed(3)}</b>` + (d.cut !== undefined && d.cut !== null ? ` <span class="cutv">${sign} ${Number(d.cut).toFixed(3)}</span>` : '');
+  };
+  // level 1: retriever
+  let h = document.createElement('span'); h.className = 'lvh'; h.textContent = 'Retriever'; wrap.appendChild(h);
+  const rbar = document.createElement('div'); rbar.className = 'blks';
+  rets.forEach(r => {
+    const tot = Number((r.members.map(gi => cards[gi]).filter(c => Number(c.rank_total) > 0)[0] || {}).rank_total);
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'blk';
+    b.innerHTML = `<span class="bn">${esc(r.name)}</span>` + (tot > 0 ? `<span class="bt">${tot} flagged</span>` : '');
+    b.onclick = () => { if (P.ret !== r.k){ stopAll(); P.ret = r.k; P.idx = -1; P.filt.clear(); P.render(); } };
+    r.btn = b; rbar.appendChild(b);
+  });
+  wrap.appendChild(rbar);
+  // level 2: verdict-case filters (toggle; none active = all shown)
+  h = document.createElement('span'); h.className = 'lvh'; h.textContent = 'Human verdict (filter)'; wrap.appendChild(h);
+  const fbar = document.createElement('div'); fbar.className = 'blks sub cfil'; wrap.appendChild(fbar);
+  h = document.createElement('span'); h.className = 'lvh'; h.textContent = 'Flagged stems, closest retrieval first'; wrap.appendChild(h);
+  const list = document.createElement('div'); list.className = 'rlist'; wrap.appendChild(list);
+  P.render = () => {
+    const r = rets.filter(x => x.k === P.ret)[0]; if (!r) return;
+    rets.forEach(x => x.btn.classList.toggle('on', x.k === P.ret));
+    // filters
+    fbar.innerHTML = '';
+    const cases = [];
+    r.members.forEach(gi => { const c = cards[gi], k = slug(c.case); if (k && !cases.some(x => x.k === k)) cases.push({k: k, cls: caseClass(c.case), name: c.case, total: Number(c.case_total) || 0}); });
+    cases.sort((a, b) => (CASE_RANK[a.cls] - CASE_RANK[b.cls]) || a.name.localeCompare(b.name));
+    cases.forEach(cs => {
+      const b = document.createElement('button'); b.type = 'button';
+      const on = !P.filt.size || P.filt.has(cs.k);
+      b.className = 'blk' + (P.filt.has(cs.k) ? ' on' : '') + (on ? '' : ' off');
+      b.innerHTML = `<span class="cdot ctag ${cs.cls}" style="border:0;padding:0"></span><span class="bn">${esc(cs.name)}</span>` + (cs.total ? `<span class="bt">${cs.total}</span>` : '');
+      b.title = 'Show only this verdict (click again to clear)';
+      b.onclick = () => { if (P.filt.has(cs.k)) P.filt.delete(cs.k); else P.filt.add(cs.k); P.render(); };
+      fbar.appendChild(b);
+    });
+    // rows
+    list.innerHTML = ''; P.chips = [];
+    const mem = r.members.slice().sort((a, b) => ((Number(cards[a].rank) || 1e9) - (Number(cards[b].rank) || 1e9)));
+    let prev = 0;
+    mem.forEach(gi => {
+      const c = cards[gi];
+      if (P.filt.size && !P.filt.has(slug(c.case))) return;
+      const rk = Number(c.rank) || 0;
+      if (prev && rk > prev + 1){
+        const g = document.createElement('div'); g.className = 'rgap';
+        g.textContent = (rk - prev - 1 === 1 ? 'rank ' + (prev + 1) : 'ranks ' + (prev + 1) + '–' + (rk - 1)) + ' not on this page';
+        list.appendChild(g);
+      }
+      if (rk) prev = rk;
+      const row = document.createElement('button'); row.type = 'button';
+      row.className = 'rrow' + (P.idx === gi ? ' on' : ''); row.dataset.cid = c.id;
+      row.setAttribute('aria-expanded', P.idx === gi ? 'true' : 'false');
+      const cls = caseClass(c.case);
+      row.innerHTML = `<span class="rk">${rk ? rk : '–'}<small> / ${Number(c.rank_total) || '?'}</small></span>` +
+        `<span><span class="ctag ${cls}">${esc(c.case || '')}</span></span>` +
+        `<span class="rin"><span class="cid">${esc(c.label || c.id)}</span>${esc(c.hint || c.title || '')}</span>` +
+        `<span class="rsc">${scoreOf(c)}</span><span class="rcv"></span>`;
+      row.onclick = () => P.select(gi, {toggle: true});
+      list.appendChild(row); P.chips.push(row);
+      if (P.idx === gi){
+        let node = P.nodes.get(gi);
+        if (!node){ node = buildBody(sec, c); P.nodes.set(gi, node); }
+        const bw = document.createElement('div'); bw.className = 'rbody'; bw.appendChild(node);
+        list.appendChild(bw);
+        requestAnimationFrame(() => (node.waves || []).forEach(w => drawWave(w[0], w[1])));
+      }
+    });
+  };
+  P.select = (gi, o) => {
+    o = o || {};
+    if (idxs.indexOf(gi) < 0 || !cards[gi]) return;
+    stopAll();
+    if (P.idx === gi && o.toggle){ P.idx = -1; P.render(); return; }   // clicking the open row collapses it; deep links never do
+    P.idx = gi;
+    const c = cards[gi], k = c.retriever_key || slug(c.retriever);
+    if (k && k !== P.ret){ P.ret = k; P.filt.clear(); }
+    if (P.filt.size && !P.filt.has(slug(c.case))) P.filt.clear();   // a deep link must not land on a hidden row
+    P.render();
+    if (o.hash !== false) setHash(sec.id + '-' + (c.label || c.id));
+    if (o.focus){ const row = P.chips.filter(x => x.dataset.cid === c.id)[0]; if (row) row.focus({preventScroll: true}); }
+  };
+  P.sync = () => {};
+  P.ranked = true;  // starts with every row collapsed (user, 2026-09-16)
+  const el = document.createElement('div');
+  el.className = opts.title ? 'pnl kblk' : 'pnl';
+  el.appendChild(wrap);
+  P.el = el;
+  P.render();
+  return P;
+}
+function selectExample(sid, idx, opts){
+  const st = SEC[sid];
+  if (!st) return;
+  const P = st.byIdx.get(idx);
+  if (P) P.select(idx, opts);
+}
+
+// -- page --
+// "paper 4.3 . Figure 2, Table 3": the paper section the material comes from and its float(s), muted and
+// right-aligned in the heading (demo_build.SECTIONS owns the mapping).
+function paperRef(sec){
+  const bits = [];
+  if (sec.paper) bits.push('Section ' + esc(sec.paper));
+  if (sec.float) bits.push(esc(sec.float));
+  return bits.join(' <span class="sep">&middot;</span> ');
+}
+function buildSection(sec){
+  const s = document.createElement('section'); s.id = sec.id;
+  // Heading = the web section number and the title, plus the paper cross-reference on the right.
+  const hd = document.createElement('div'); hd.className = 'shead';
+  const h = document.createElement('h2');
+  h.innerHTML = (sec.num ? `<span class="snum">${esc(sec.num)}.</span> ` : '') + esc(sec.title || '');
+  hd.appendChild(h);
+  const ref = paperRef(sec);
+  if (ref){
+    const r = document.createElement('span'); r.className = 'pref'; r.innerHTML = ref;
+    if (sec.paper_title) r.title = 'Paper section ' + sec.paper + ', ' + sec.paper_title;
+    hd.appendChild(r);
+  }
+  s.appendChild(hd);
+  if (sec.intro_html){ const d = document.createElement('div'); d.className = 'intro'; d.innerHTML = sec.intro_html; s.appendChild(d); }
+  let blocks = sec.floats || [];
+  if (!blocks.length){
+    const fk = sec.figure || FIG_AT[sec.id];
+    if (fk && FIGS[fk]) blocks = [{label: sec.float, title: sec.title, kind: 'figure', figure: fk, caption: sec.figure_caption}];
+  }
+  blocks.forEach(b => { const el = floatBlock(b); if (el) s.appendChild(el); });
+  const cards = sec.cards || [];
+  if (cards.length){
+    // Cards of a kind that gets its own block (the regeneration gate) are split off into their own panel
+    // below the hierarchy; everything else is the hierarchy (or the flat switcher).
+    const kinds = (sec.kinds || []).filter(k => k && k.kind);
+    const own = new Map();
+    kinds.forEach(k => own.set(k.kind, []));
+    const main = [];
+    cards.forEach((c, i) => {
+      const k = c.kind || '';
+      if (k && own.has(k)) own.get(k).push(i); else main.push(i);
+    });
+    const lv = (sec.levels && sec.levels.length) ? sec.levels : deriveLevels(main.map(i => cards[i]));
+    const panels = [];
+    if (main.length) panels.push(lv.indexOf('retriever') >= 0 ? buildRankedPanel(sec, main, {}) : buildPanel(sec, main, lv, {}));  // E3: ranked list (user, 2026-09-16)
+    kinds.forEach(k => {
+      const idxs = own.get(k.kind) || [];
+      if (idxs.length) panels.push(buildPanel(sec, idxs, [], {title: k.title, sub: k.sub, label: k.title, suffix: '-' + k.kind}));
+    });
+    const byIdx = new Map();
+    panels.forEach(P => { P.idxs.forEach(gi => byIdx.set(gi, P)); s.appendChild(P.el); });
+    SEC[sec.id] = {sec: sec, panels: panels, byIdx: byIdx};
+  }
+  return s;
+}
+function findExample(sid, label){
+  // Index of the example whose paper identifier (T3.3) or card id (t3_3) matches, else -1.
+  const st = SEC[sid], lab = String(label == null ? '' : label).toLowerCase();
+  if (!st || !lab) return -1;
+  const cards = st.sec.cards || [];
+  let idx = -1;
+  cards.forEach((c, i) => { if (idx < 0 && (String(c.label || '').toLowerCase() === lab || String(c.id || '').toLowerCase() === lab)) idx = i; });
+  return idx;
+}
+function applyHash(scroll){
+  // '#<section>-<identifier>', e.g. '#mem-T3.3'; a plain '#<section>' is left to the browser anchor.
+  const h = decodeURIComponent(String(location.hash || '').replace(/^#/, ''));
+  const m = /^([A-Za-z0-9]+)-(.+)$/.exec(h);
+  if (!m) return false;
+  const idx = findExample(m[1], m[2]);
+  if (idx < 0) return false;
+  selectExample(m[1], idx, {hash: false});
+  if (scroll){ const el = document.getElementById(m[1]); if (el) el.scrollIntoView(); }
+  return true;
+}
+function render(){
+  document.title = D.title || 'Audio examples';
+  document.getElementById('brand').textContent = D.short_title || ''; if (!D.short_title) document.getElementById('brand').style.display = 'none';  // 2026-09-19: brand text removed (user)
+  document.getElementById('pageTitle').textContent = D.title || '';
+  const au = document.getElementById('authors');
+  if (D.profile === 'named' && D.authors && D.authors.length){
+    const affs = []; D.authors.forEach(a => { if (a.affiliation && !affs.includes(a.affiliation)) affs.push(a.affiliation); });
+    au.innerHTML = D.authors.map(a => `${esc(a.name)}<sup>${affs.indexOf(a.affiliation) + 1}</sup>`).join(', ') +
+      '<br><span class="muted">' + affs.map((x, i) => `<sup>${i + 1}</sup>${esc(x)}`).join(' &nbsp; ') + '</span>';
+  } else au.style.display = 'none';  // no author line on the anonymous page (user, 2026-09-16)
+  document.getElementById('subtitle').innerHTML = D.subtitle || '';
+  if (D.review){
+    const bar = document.createElement('div'); bar.id = 'rvbar';
+    bar.innerHTML = '<span class="cnt" id="rvcnt"></span><span class="sp" style="flex:1"></span>' +
+      '<button type="button" class="pri" id="rvcopy">Copy selection</button>';
+    document.getElementById('subtitle').insertAdjacentElement('afterend', bar);
+    document.getElementById('rvcopy').onclick = rvCopy;
+    setTimeout(rvRefresh, 0);
+  }
+  document.getElementById('overview').innerHTML = D.overview_html || '';
+  const nav = document.getElementById('navLinks'); nav.innerHTML = '';
+  const main = document.getElementById('main'); main.innerHTML = '';
+  (D.sections || []).forEach(sec => {
+    // Nav carries the web section number and a short label: 1. Generation, 2. Swaps, 3. Memorization, Notes.
+    const a = document.createElement('a'); a.className = 'lnk'; a.href = '#' + sec.id;
+    a.textContent = (sec.num ? sec.num + '. ' : '') + (sec.nav || sec.short || sec.title || '');
+    a.title = [sec.title || '', sec.paper ? 'Section ' + sec.paper : '', sec.float || ''].filter(Boolean).join(' \u00b7 ');
+    nav.appendChild(a);
+    main.appendChild(buildSection(sec));
+  });
+  document.getElementById('foot').innerHTML = D.footer_html || '';
+  // first example of every panel: the hierarchy lands on retriever 1, its first case, rank 1
+  Object.keys(SEC).forEach(sid => SEC[sid].panels.forEach(P => {
+    if (P.ranked) return;                                   // ranked list: all rows closed
+    const want = SEC[sid].sec.default ? P.idxs.filter(gi => SEC[sid].sec.cards[gi].label === SEC[sid].sec.default)[0] : undefined;
+    P.select(want !== undefined ? want : P.idxs[0], {hash: false});   // sec.default = the card that opens first (E1.12)
+  }));
+  applyHash(true);
+  window.addEventListener('hashchange', () => applyHash(true));
+  // highlight the section in view
+  if ('IntersectionObserver' in window){
+    const links = Array.from(nav.querySelectorAll('a.lnk'));
+    const io = new IntersectionObserver(es => {
+      es.forEach(en => { if (en.isIntersecting) links.forEach(l => l.classList.toggle('on', l.getAttribute('href') === '#' + en.target.id)); });
+    }, {rootMargin: '-40% 0px -55% 0px'});
+    main.querySelectorAll('section').forEach(s => io.observe(s));
+  }
+}
+fetch('data.json?v=9b40f9a2', {cache: 'no-cache'}).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+  .then(d => { D = d; render(); })
+  .catch(e => { const el = document.getElementById('loadMsg');
+    if (el) el.textContent = 'Could not load data.json (' + e + '). Serve this folder over HTTP.'; });
+
+// -- keys --
+document.addEventListener('keydown', e => {
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+  const k = e.key;
+  if (k === ' '){ e.preventDefault(); stopAll(); return; }
+  if (k === 'Escape'){ stopAll(); return; }
+  if ((k === 'ArrowLeft' || k === 'ArrowRight') && current && current.pos){
+    e.preventDefault();
+    const p = Math.min(Math.max(0, current.pos() + (k === 'ArrowLeft' ? -1 : 1)), current.dur - 0.05);
+    playRow(...current.args, p); return;
+  }
+});
+</script>
 </body>
 </html>
